@@ -1,0 +1,27 @@
+{
+    "pretrained_model": "./jina-embeddings-v2-base-zh",
+    "seed": 12345,
+    "num_epochs": 100,
+    "fp16_run": false,
+    "lr": 2e-4,
+    "bert_lr": 2e-5,
+    "lr_decay": 0.999875,
+    "weight_decay": 0.01,
+    "max_grad": 1.0,
+    "warmup_epochs": 1,
+    "c_pdy": 0.5,
+    "c_emo": 0.3,
+    "c_sim": 0.2,
+    "max_len": 32,
+    "batch_size": 8,
+    "eval_batch_size": 8,
+    "log_steps": 20,
+    "eval_steps": 200,
+    "save_steps": 2000,
+
+    "pooler": "mean",
+    "lora_rank": 8,
+    "lora_alpha": 32,
+    "pdy_feats": 6,
+    "emo_feats": 8
+}
