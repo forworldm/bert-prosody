@@ -1,7 +1,7 @@
 import torch
 import os
 from torch import nn
-from transformers import AutoModel, AutoConfig
+from transformers import AutoModel, AutoConfig, AutoModelForMaskedLM, BertForMaskedLM
 from transformers.models.bert.modeling_bert import BertPredictionHeadTransform
 from peft import get_peft_model, LoraConfig
 
@@ -15,12 +15,15 @@ class Model(nn.Module):
     def __init__(self, config, from_pretrained=True, lora=False):
         super().__init__()
         self.config = config
+        self.bert = None
+        self.transform = None
         if from_pretrained:
-            self.bert = AutoModel.from_pretrained(
-                os.path.realpath(config["pretrained_model"]),
-                trust_remote_code=True,
-                add_pooling_layer=False,
-            )
+            if self.bert is None:
+                self.bert = AutoModel.from_pretrained(
+                    os.path.realpath(config["pretrained_model"]),
+                    trust_remote_code=True,
+                    add_pooling_layer=False,
+                )
         else:
             bert_config = AutoConfig.from_pretrained(
                 os.path.realpath(config["pretrained_model"]),
@@ -40,7 +43,8 @@ class Model(nn.Module):
                     lora_alpha=config["lora_alpha"],
                 ),
             )
-        self.transform = BertPredictionHeadTransform(self.bert.config)
+        if self.transform is None:
+            self.transform = BertPredictionHeadTransform(self.bert.config)
         hidden_size = self.bert.config.hidden_size
         self.pdy_cls = nn.Linear(hidden_size, config["pdy_feats"])
         self.emo_cls = nn.Linear(hidden_size, config["emo_feats"])

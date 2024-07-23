@@ -118,7 +118,7 @@ def main():
     pdy_train_sampler = DistributedBucketSampler(
         pdy_train_data,
         batch_size=config["batch_size"],
-        boundaries=[4, 224, 320, 496],
+        boundaries=[4, 224, 320, 512],
         shuffle=True,
     )
     pdy_train_loader = DataLoader(
@@ -140,7 +140,7 @@ def main():
     emo_train_sampler = DistributedBucketSampler(
         emo_train_data,
         batch_size=config["batch_size"],
-        boundaries=[4, 224, 320, 496],
+        boundaries=[4, 224, 320, 512],
         shuffle=True,
     )
     emo_train_loader = DataLoader(
@@ -162,7 +162,7 @@ def main():
     sim_train_sampler = DistributedBucketSampler(
         sim_train_data,
         batch_size=config["batch_size"],
-        boundaries=[4, 224, 320, 496],
+        boundaries=[4, 224, 320, 512],
         shuffle=True,
     )
     sim_train_loader = DataLoader(
@@ -190,14 +190,14 @@ def main():
     scheduler = get_linear_schedule_with_warmup(
         optimizer,
         num_warmup_steps=(
-            0 if args.no_warmup else config["warmup_epochs"] * len(emo_train_loader)
+            0 if args.no_warmup else config["warmup_epochs"] * len(emo_train_loader) / config["accum_steps"]
         ),
-        num_training_steps=config["num_epochs"] * len(emo_train_loader),
+        num_training_steps=config["num_epochs"] * len(emo_train_loader) / config["accum_steps"],
         last_epoch=(-1 if args.no_optim else global_step - 1),
     )
     scaler = (
-        torch.cuda.amp.GradScaler(enabled=config["fp16_run"] and amp_type == torch.float16)
-        if device == "cuda"
+        torch.cuda.amp.GradScaler()
+        if device == "cuda" and config["fp16_run"] and amp_type == torch.float16
         else None
     )
 
@@ -236,9 +236,14 @@ def train(
     loaders,
     writer: SummaryWriter,
 ):
+    accu_steps = 0
     loss_func = torch.nn.CrossEntropyLoss(reduction="none")
 
-    def backward(loss):
+    def backward(loss, name):
+        scale = config[name]
+        if config["accum_steps"] > 1:
+            scale /= float(config["accum_steps"])
+        loss = loss * scale
         if scaler is None:
             loss.backward()
         else:
@@ -268,12 +273,13 @@ def train(
             pdy_hat, _, _ = model(inputs_ids, attention_mask, token_type_ids, token_ids)
         type_ids = type_ids.flatten()
         pdy_mask = type_ids != config["pdy_feats"]
-        type_ids[~pdy_mask] = 0
+        type_ids[~pdy_mask] = -100
         pdy_loss = (
             loss_func(pdy_hat.reshape(type_ids.size(0), -1).float(), type_ids) * pdy_mask
         ).sum() / pdy_mask.sum()
-        optimizer.zero_grad()
-        backward(pdy_loss * config["c_pdy"])
+        if accu_steps == 0:
+            optimizer.zero_grad()
+        backward(pdy_loss, "c_pdy")
 
         try:
             data = next(emo_iter)
@@ -293,7 +299,7 @@ def train(
                 inputs_ids, attention_mask, token_type_ids, token_ids, nsp=False
             )
         emo_loss = loss_func(emo_hat.float(), type_ids).mean()
-        backward(emo_loss * config["c_emo"])
+        backward(emo_loss, "c_emo")
 
         try:
             data = next(sim_iter)
@@ -312,17 +318,20 @@ def train(
                 inputs_ids, attention_mask, token_type_ids, None, nsp=True
             )
         sim_loss = loss_func(sim_hat.float(), type_ids).mean()
-        backward(sim_loss * config["c_sim"])
+        backward(sim_loss, "c_sim")
 
-        if scaler is None:
-            torch.nn.utils.clip_grad_norm_(model.bert.parameters(), config["max_grad"])
-            optimizer.step()
-        else:
-            scaler.unscale_(optimizer)
-            torch.nn.utils.clip_grad_norm_(model.bert.parameters(), config["max_grad"])
-            scaler.step(optimizer)
-            scaler.update()
-        scheduler.step()
+        accu_steps += 1
+        if accu_steps >= config["accum_steps"]:
+            if scaler is None:
+                torch.nn.utils.clip_grad_norm_(model.bert.parameters(), config["max_grad"])
+                optimizer.step()
+            else:
+                scaler.unscale_(optimizer)
+                torch.nn.utils.clip_grad_norm_(model.bert.parameters(), config["max_grad"])
+                scaler.step(optimizer)
+                scaler.update()
+            scheduler.step()
+            accu_steps = 0
 
         global_step += 1
         if global_step % config["log_steps"] == 0:

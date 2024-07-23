@@ -52,7 +52,7 @@ def eval_pdy(tokenizer, model, text):
     text = list(text)
     for i, p in zip(reversed(pos), reversed(pdy[1:-1])):
         if p != 0:
-            text.insert(i, f"#{p}")
+            text.insert(i-1, f"#{p}")
     text = "".join(text)
     print(text)
 

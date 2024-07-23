@@ -59,7 +59,7 @@ class PdyDataset(Dataset):
 
             sp_id = ids[-1]  # [SP]
             sp_tp = tps[-1]
-            token_ids_it = ids + [sp_id] * (tp_len - len(ids))
+            token_ids_it = ids + list(range(sp_id + 1, sp_id + 1 + tp_len - len(ids)))
             type_ids_it = tps + [sp_tp] * (tp_len - len(tps))
 
             inputs_ids.append(inputs_ids_it)
