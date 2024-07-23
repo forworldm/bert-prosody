@@ -25,17 +25,25 @@ def is_word(text):
 
 
 def extract_pdy(label: str, tokens: list[str], unk_token: str):
-    pdy_mask = 6
-    pdy, ids = [4], [0]  # [CLS]
+    pdy_mask = 4
+    pdy, ids = [pdy_mask], [0]  # [CLS]
     i, j = 1, 0
+    next_pdy = 0
     while i < len(tokens) - 1:
         tk = tokens[i]
         n = 1
         while i + n < len(tokens) and tokens[i + n].startswith("##"):
             tk += tokens[i + n][2:]
             n += 1
-            pdy.append(5 if tokens[i + n][2:].isalnum() else 0)
+            pdy.append(0)
             ids.append(i + n - 2)
+        while j < len(label) and label[j].isspace():
+            j += 1
+        while j < len(label) and label[j] == "#":
+            t = int(label[j + 1])
+            assert t >= 1 and t <= 4
+            next_pdy = min(t, 3)
+            j += 2
         while j < len(label) and label[j].isspace():
             j += 1
         if tk == unk_token:
@@ -51,28 +59,19 @@ def extract_pdy(label: str, tokens: list[str], unk_token: str):
         assert j + l <= len(label)
         i += n
         j += l
-        if j < len(label) and label[j] == "#":
-            t = int(label[j + 1])
-            if t == 3 and j + 2 < len(label) and not is_symbol(label[j + 2]):
-                t = 2
-            assert t >= 1 and t <= 4
-            pdy.append(min(t, 3))
-            j += 2
-        elif is_word(tk) or (tk == unk_token and is_word(label[j - l : j])):
-            pdy.append(0)
+        if is_word(tk) or (tk == unk_token and is_word(label[j - l : j])):
+            pdy.append(next_pdy)
+            next_pdy = 0
         else:
             assert is_symbol(label[j - l : j])
-            if pdy[-1] == 0 and is_word(label[j - l - 1]) and is_word(label[j]):
-                print()
-                print(label[j - l - 1 : j + 1])
-                pdy.append(0)
-            else:
-                pdy.append(4)
+            pdy.append(0)
         ids.append(i - 1)  # the last piece of word
+    while j < len(label) and label[j] == "#":
+        j += 2
     assert i == len(tokens) - 1
-    assert j >= len(label)
-    pdy.append(4), ids.append(i)  # [SP]
-    assert len(pdy) == len(ids) and len(pdy) == len(tokens)
+    assert j == len(label)
+    pdy.append(pdy_mask), ids.append(i)  # [SP]
+    assert len(pdy) == len(ids) and len(pdy) == len(tokens) and max(pdy[1:-1]) < pdy_mask
     assert ids == list(range(0, len(ids)))
     return pdy, ids
 
