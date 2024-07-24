@@ -25,7 +25,7 @@ def is_word(text):
 
 
 def extract_pdy(label: str, tokens: list[str], unk_token: str):
-    pdy_mask = 4
+    pdy_mask = 6
     pdy, ids = [pdy_mask], [0]  # [CLS]
     i, j = 1, 0
     next_pdy = 0
@@ -35,7 +35,7 @@ def extract_pdy(label: str, tokens: list[str], unk_token: str):
         while i + n < len(tokens) and tokens[i + n].startswith("##"):
             tk += tokens[i + n][2:]
             n += 1
-            pdy.append(0)
+            pdy.append(5 if tokens[i + n - 2][2:].isalnum() else 4)
             ids.append(i + n - 2)
         while j < len(label) and label[j].isspace():
             j += 1
@@ -64,7 +64,7 @@ def extract_pdy(label: str, tokens: list[str], unk_token: str):
             next_pdy = 0
         else:
             assert is_symbol(label[j - l : j])
-            pdy.append(0)
+            pdy.append(4)
         ids.append(i - 1)  # the last piece of word
     while j < len(label) and label[j] == "#":
         j += 2

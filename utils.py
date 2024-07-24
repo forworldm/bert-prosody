@@ -84,7 +84,7 @@ def save_checkpoint(model, optimizer, learning_rate, epoch, checkpoint_path):
 
 import regex
 
-_word_regex = regex.compile("\\s*(?:[A-Za-z]+(?:'(?:s|t|re|ve|m|ll|d)(?=[^A-Za-z]))?|\\d+|\\X)")
+_word_regex = regex.compile("\\s*(?:[A-Za-z]+(?:'(?:s|t|re|ve|m|ll|d)(?=[^A-Za-z]|$))?|\\d+|\\X)")
 
 def tokenize_bert_format(tokenizer, text):
     words = regex.findall(_word_regex, text)
